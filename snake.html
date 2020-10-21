@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Snake</title>
+    <style>
+      html {
+	height: 100%;
+	font-family: arial;
+	overflow: hidden;
+      }
+      body {
+	background: linear-gradient(to bottom,black,purple);
+	background-repeat: no-repeat;
+	background-size: cover;
+	height: 100%;
+	margin: 4px;
+      }
+
+      #title {
+	background-color: #DD0000;
+	margin: 2px;
+	width: 970px;
+	height: 90px;
+	text-align: center;
+      }
+      #head {
+	margin-top: 0px;
+	margin-bottom: 0px;
+	font-size: 80px;
+	color: #004800;
+	height: 80px;
+      }
+
+      #left {
+	float: left;
+	padding: 2px;
+      }
+      #right {
+	padding: 4px;
+      }
+
+      #canvas {
+	background: #EEE;
+	border: solid 2px #666;
+      }
+
+      #start {
+	height: 50px;
+	font-size: 40px;
+	color: #00AE00;
+	background: linear-gradient(to bottom right,#340034
+,#400040);
+	border: 0px;
+      }
+      #start:focus {
+	outline: none;
+      }
+      #start:active {
+	background: #300030;
+	color: #00FF00;
+      }
+
+      #bottom {
+	background: linear-gradient(to bottom right,#220022
+,#400040);
+	overflow: hidden;
+	visibility: hidden;
+	height: 51px;
+      }
+      #score,#high {
+	color: #00BF00;
+
+	font-size: 40px;
+	margin-top: 0px;
+	margin-bottom: 0px;
+	margin-left: 0px;
+	padding-left: 0px;
+	padding-top: 4px;
+	visibility: hidden;
+	width: auto;
+	float: left;
+      }
+      #high {
+	float: right;
+      }
+
+      #save,#load {
+	background: linear-gradient(to bottom,#340034
+,#400040,#340034);
+	color: #999;
+	width: 120px;
+	height: 40px;
+	margin-top: 2px;
+	margin-bottom: 8px;
+	font-size: 20px;
+	border: 0px;
+      }
+      #save:focus,#load:focus {
+	outline: none;	
+      }
+      #save:active,#load:active {
+	background: linear-gradient(to bottom,#400040
+,#2D002D);
+	color: #666;
+      }
+      #load {
+	margin-left: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="title"><h1 id="head">S&emsp;&ensp;N&emsp;&ensp;A&emsp;&ensp;K&emsp;&ensp;E</h1></div>
+    <div id="left">
+      <canvas id="canvas" width="720px" height="480px"></canvas>
+      <br>
+      <button id="start" onclick="start()">Click to start game</button>
+      <div id="bottom">
+	<p id="score"></p>
+	<p id="high">high</p>
+      </div>
+    </div>
+    <div id="right">
+      <div id="data1"><button id="save" class="1" onclick="save(this)">Save 1</button><button id="load" class="1" onclick="load(this)">Load 1</button></div>
+      <div id="data2"><button id="save" class="2" onclick="save(this)">Save 2</button><button id="load" class="2" onclick="load(this)">Load 2</button></div>
+      <div id="data3"><button id="save" class="3" onclick="save(this)">Save 3</button><button id="load" class="3" onclick="load(this)">Load 3</button></div>
+    </div>
+    <script>
+      window.onbeforeunload = function () { //scroll to the top
+	window.scrollTo(0, 0);
+      }
+
+      window.addEventListener("keydown", function(e) { //disables keyboard/space scrolling
+	if([32, 37, 38, 39, 40].indexOf(e.keyCode) > -1) {
+	  e.preventDefault();
+	}
+      }, false);
+
+      if(localStorage.getItem("high")==undefined) {
+	localStorage.setItem("high",0);
+      }
+
+      confirm("Welcome to Snake\nClick anywhere on the grid to add/remove rocks\nYou can save rock positions to load them quickly for later games\nClick the button below to start the game");
+
+      var canvas=document.getElementById("canvas");
+      var ctx=canvas.getContext("2d");
+      var pregameInterval=setInterval(pregame,10); //game screen where adding rocks, loading rocks etc.
+      var gameInterval=undefined; //actual game
+
+      var snakeWidth=20;
+      var snake=[[canvas.width/2+snakeWidth/2,canvas.height/2+snakeWidth/2,0]]; //snake array, initial snake position
+//for the momentum, 0=right, 1=up, 2=left, 3=down
+      var apple=[canvas.width+snakeWidth/2,canvas.height/2+snakeWidth/2]; //apple array, places apple off screen for now
+
+      var crashText=undefined;
+
+      var right=false; //keys
+      var left=false;
+      var up=false;
+      var down=false;
+      document.addEventListener('keydown',keydown,false);
+
+      var rock=[]; //rocks array
+      var mouseX=undefined;
+      var mouseY=undefined;
+      document.addEventListener('mousedown',mousedown,false); //for placing rocks
+
+      grid(); //draw grid
+
+      function mousedown(event) {
+	mouseX=event.clientX-canvas.getBoundingClientRect().x-2; //get mouse position relative to corner of canvas
+	mouseY=event.clientY-canvas.getBoundingClientRect().y-2;
+	
+      }
+      function initRock() { //start drawing rocks
+	for(i=0; i<canvas.height/snakeWidth; i++) {
+	  rock[i]=[];
+	  for(j=0; j<canvas.width/snakeWidth; j++) {
+	    rock[i][j]=0;
+	  }
+	}
+      }
+      initRock();
+      function addRock() { //adding the rocks you choose
+	if(mouseX>0 && mouseY>0 && mouseX<canvas.width && mouseY<canvas.height) {
+	  rock[Math.floor(mouseY/snakeWidth)][Math.floor(mouseX/snakeWidth)]+=1;
+	  mouseX=-1;
+	  mouseY=-1;
+	}
+      }
+      function rockDraw() { //drawing the rocks
+	for(i=0; i<rock.length; i++) {
+	  for(j=0; j<rock[i].length; j++) {
+	    if(rock[i][j]%2==1) {
+	      ctx.beginPath();
+	      ctx.fillStyle="#666";
+	      ctx.rect((j+.1)*snakeWidth,(i+.1)*snakeWidth,snakeWidth*.8,snakeWidth*.8);
+	      ctx.fill();
+	      if(rock[i][j+1]%2==1 && rock[i][j+1]!=undefined) {
+		ctx.rect((j+.9)*snakeWidth,(i+.1)*snakeWidth,snakeWidth*.2,snakeWidth*.8);
+		ctx.fill();
+	      }
+	      if(rock[i+1]!=undefined) {
+		if(rock[i+1][j]%2==1) {
+		  ctx.rect((j+.1)*snakeWidth,(i+.9)*snakeWidth,snakeWidth*.8,snakeWidth*.2);
+		  ctx.fill();
+		}
+	      }
+	      if(rock[i][j+1]!=undefined && rock[i+1]!=undefined) {
+		if(rock[i+1][j+1]%2==1 && rock[i][j+1]%2==1 && rock[i+1][j]%2==1) {
+		  ctx.rect((j+.9)*snakeWidth,(i+.9)*snakeWidth,snakeWidth*.2,snakeWidth*.2);
+		  ctx.fill();
+		}
+	      }
+	    }
+	  }
+	}
+      }
+
+      function save(element) {
+	localStorage.setItem("data"+element.className,JSON.stringify(rock));
+      }
+      function load(element) {
+	if(localStorage.getItem("data"+element.className)!=undefined && gameInterval==undefined) {
+	  rock=JSON.parse(localStorage.getItem("data"+element.className));
+	}
+      }
+
+      function pregame() { //the pregame drawing loop
+	ctx.clearRect(0,0,canvas.width,canvas.height);
+	grid();
+	addRock();
+	snakeDraw();
+	rockDraw();
+      }
+
+
+
+      function start() { //after you click the start button, end pregame and start game
+	clearInterval(pregameInterval);
+	gameInterval=setInterval(draw,80);
+document.getElementById("start").parentNode.removeChild(document.getElementById("start"));
+	appleRand(); //start with random apple
+      }
+
+      function keydown(event) { //find which key you pressed
+	switch(event.keyCode) {
+	  case 39:
+	    right=true;
+	    left=false;
+	    up=false;
+	    down=false;
+	    break;
+	  case 37:	    right=false;
+	    left=true;
+	    up=false;
+	    down=false;
+	    break;
+	  case 38:
+	    right=false;
+	    left=false;
+	    up=true;
+	    down=false;
+	    break;
+	  case 40:	    right=false;
+	    left=false;
+	    up=false;
+	    down=true;
+	    break;
+	}
+      }
+      function direction() { //change the direction of the head snake
+	if(right && !(snake[0][2]==2)) {
+	  snake[0][2]=0;
+	}else if(left && !(snake[0][2]==0)) {
+	  snake[0][2]=2;
+	}else if(up && !(snake[0][2]==3)) {
+	  snake[0][2]=1;
+	}else if(down && !(snake[0][2]==1)) {
+	  snake[0][2]=3;
+	}
+      }
+
+      function grid() { //draw the grid
+	for(i=0; i<canvas.width/snakeWidth; i++) {
+	  ctx.beginPath();
+	  ctx.strokeStyle="#CCC";
+	  ctx.moveTo(i*snakeWidth,0);
+	  ctx.lineTo(i*snakeWidth,canvas.height);
+	  ctx.stroke();
+	}
+	for(i=0; i<canvas.height/snakeWidth; i++) {
+	  ctx.beginPath();
+	  ctx.strokeStyle="#CCC";
+	  ctx.moveTo(0,i*snakeWidth);
+	  ctx.lineTo(canvas.width,i*snakeWidth);
+	  ctx.stroke();
+	}
+      }
+
+      function snakeDraw() { //draw the snake
+	ctx.beginPath(); //draw the head
+	ctx.fillStyle="#000";
+	ctx.rect(snake[0][0]-snakeWidth*.4,snake[0][1]-snakeWidth*.4,snakeWidth*.8,snakeWidth*.8);
+	ctx.fill();
+	if((snake[1][0]-snake[0][0])==0) {
+	  ctx.rect(snake[0][0]-snakeWidth*.4,snake[0][1],snakeWidth*.8,-(snake[0][1]-snake[1][1])*.5);
+	  ctx.fill();
+	}else if(snake[1][0]>0) {
+	    ctx.rect(snake[0][0],snake[0][1]-snakeWidth*.4,-(snake[0][0]-snake[1][0])*.5,snakeWidth*.8);
+	    ctx.fill();
+	}
+	ctx.beginPath(); //draw the eyes
+	ctx.fillStyle="#FF0000";
+	ctx.rect(snake[0][0]-.05*(snakeWidth-3*snakeWidth*Math.round(Math.cos((snake[0][2]+.5)*Math.PI*.5))),snake[0][1]-.05*(snakeWidth+3*snakeWidth*Math.round(Math.sin((snake[0][2]+.5)*Math.PI*.5))),2,2);
+	ctx.rect(snake[0][0]-.05*(snakeWidth-3*snakeWidth*Math.round(Math.cos((snake[0][2]-.5)*Math.PI*.5))),snake[0][1]-.05*(snakeWidth+3*snakeWidth*Math.round(Math.sin((snake[0][2]-.5)*Math.PI*.5))),2,2);
+	ctx.fill();
+
+	for(i=1; i<snake.length-1; i++) { //draw the body
+	  ctx.beginPath();
+	  ctx.fillStyle="#004800";
+	  ctx.rect(snake[i][0]-snakeWidth*.4,snake[i][1]-snakeWidth*.4,snakeWidth*.8,snakeWidth*.8);
+	  ctx.fill();
+	  if((snake[i-1][0]-snake[i][0])==0) {
+	    ctx.rect(snake[i][0]-snakeWidth*.4,snake[i][1],snakeWidth*.8,-(snake[i][1]-snake[i-1][1])*.5);
+	    ctx.fill();
+	  }else {
+	    ctx.rect(snake[i][0],snake[i][1]-snakeWidth*.4,-(snake[i][0]-snake[i-1][0])*.5,snakeWidth*.8);
+	    ctx.fill();
+	  }
+	  if((snake[i+1][0]-snake[i][0])==0) {
+	    ctx.rect(snake[i][0]-snakeWidth*.4,snake[i][1],snakeWidth*.8,-(snake[i][1]-snake[i+1][1])*.5);
+	    ctx.fill();
+	  }else if(snake[i+1][0]>0) {
+	    ctx.rect(snake[i][0],snake[i][1]-snakeWidth*.4,-(snake[i][0]-snake[i+1][0])*.5,snakeWidth*.8);
+	    ctx.fill();
+	  }
+
+	}
+
+	ctx.beginPath(); //draw the tail
+	ctx.fillStyle="#004800";
+	ctx.rect(snake[snake.length-1][0]-snakeWidth*.4,snake[snake.length-1][1]-snakeWidth*.4,snakeWidth*.8,snakeWidth*.8);
+	ctx.fill();
+	if((snake[snake.length-2][0]-snake[snake.length-1][0])==0) {
+	  ctx.rect(snake[snake.length-1][0]-snakeWidth*.4,snake[snake.length-1][1],snakeWidth*.8,-(snake[snake.length-1][1]-snake[snake.length-2][1])*.5);
+	  ctx.fill();
+	}else {
+	  ctx.rect(snake[snake.length-1][0],snake[snake.length-1][1]-snakeWidth*.4,-(snake[snake.length-1][0]-snake[snake.length-2][0])*.5,snakeWidth*.8);
+	  ctx.fill();
+	}
+
+      }
+      function snakeMove() { //move the rest of the snake
+	for(i=snake.length-1; i>0; i--) {
+	  snake[i][0]=Math.round(snake[i-1][0]);
+	  snake[i][1]=Math.round(snake[i-1][1]);
+	}
+	snake[0][0]+=Math.round(snakeWidth*Math.cos(-Math.PI*.5*snake[0][2]));
+	snake[0][1]+=Math.round(snakeWidth*Math.sin(-Math.PI*.5*snake[0][2]));
+      }
+
+      function appleDraw() { //draw the apple
+	ctx.beginPath();
+	ctx.fillStyle="red";
+	ctx.arc(apple[0],apple[1],snakeWidth*3/10,0,2*Math.PI);
+	ctx.fill();
+      }
+      function appleRand() { //randomize the apple
+	apple[0]=Math.floor(Math.random()*canvas.width/snakeWidth)*snakeWidth+snakeWidth/2;
+	apple[1]=Math.floor(Math.random()*canvas.height/snakeWidth)*snakeWidth+snakeWidth/2;
+	for(i=0; i<snake.length; i++) {
+	  if(apple[0]==Math.round(snake[i][0]) && apple[1]==Math.round(snake[i][1])) {
+	    appleRand();
+	    return;
+	  }
+	}
+	for(i=0; i<rock.length; i++) {
+	  for(j=0; j<rock[i].length; j++) {
+	    if(rock[i][j]%2==1) {
+	      if(apple[0]==Math.round((j+.5)*snakeWidth) && apple[1]==Math.round((i+.5)*snakeWidth)) {
+		appleRand();
+		return;
+	      }
+	    }
+	  }
+	}
+      }
+      function appleHit() { //check if you hit the apple
+	if(Math.round(snake[0][0])==apple[0] && Math.round(snake[0][1])==apple[1]) {
+	  appleRand();
+	  return true;
+	}
+      }
+
+      function grow() { //increase the length of the snake
+	snake.push([-snakeWidth,-snakeWidth]);
+      }
+      grow(); grow(); //start w length 3
+      function borderHit() { //check if you hit the border
+	if(snake[0][0]<0 || snake[0][0]>canvas.width || snake[0][1]<0 || snake[0][1]>canvas.height) {
+	  crashText="the wall";
+	  return true;
+	}
+      }
+      function snakeHit() { //check if you hit yourself
+	for(i=1; i<snake.length; i++) {
+	  if(Math.round(snake[0][0])==Math.round(snake[i][0]) && Math.round(snake[0][1])==Math.round(snake[i][1])) {
+	    crashText="yourself";
+	    return true;
+	  }
+	}
+      }
+      function rockHit() { //check if you hit a rock
+	for(i=0; i<rock.length; i++) {
+	  for(j=0; j<rock[i].length; j++) {
+	    if(rock[i][j]%2==1) {
+	      if(snake[0][0]==(j+.5)*snakeWidth && snake[0][1]==(i+.5)*snakeWidth) {
+		crashText="a rock";
+		return true;
+	      }
+	    }
+	  }
+	}
+      }
+      function lose() { //end game and give score
+	clearInterval(gameInterval);
+	
+	if(snake.length>localStorage.getItem("high")) {
+	  confirm("New High!\nYou crashed into "+crashText+"\nYour new highscore is "+snake.length)
+	  localStorage.setItem("high",snake.length);
+	  document.location.reload();
+	}else if(snake.length>localStorage.getItem("high")-6) {
+	  confirm("So close!\nYou crashed into "+crashText+"\nYour score was "+snake.length)
+	  document.location.reload();
+	}else {
+	  confirm("Try again!\nYou crashed into "+crashText+"\nYour score was "+snake.length);
+	  document.location.reload();
+	}
+      }
+
+
+
+      function draw() { //game loop
+	document.getElementById("score").style.visibility="visible";
+	document.getElementById("high").style.visibility="visible";
+	document.getElementById("bottom").style.visibility="visible";
+	document.getElementById("score").style.paddingLeft="15px";
+	document.getElementById("high").style.paddingRight="20px";
+	document.getElementById("score").innerHTML=("Score: "+snake.length);
+	document.getElementById("high").innerHTML=("High: "+localStorage.getItem("high"));
+	ctx.clearRect(0,0,canvas.width,canvas.height);
+
+	grid();
+	appleDraw();
+	snakeDraw();
+	rockDraw();
+
+	direction();
+
+	if(appleHit()) {
+	  grow();
+	}
+	if(borderHit() || snakeHit() || rockHit()) {
+	  lose();
+	}
+
+	snakeMove();
+      }
+    </script>
+  </body>
+</html>
